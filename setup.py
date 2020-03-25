@@ -8,6 +8,7 @@ setup(
     author="epiclabs-io",
     description="Analyzer for HTTP Live Streams (HLS) content",
     install_requires=[
-        "iso8601"
+        "iso8601",
+        "requests",
     ]
 )

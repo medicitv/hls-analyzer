@@ -9,14 +9,11 @@ import logging
 import sys
 import argparse
 import m3u8
+import requests
+
 from parsers.bitreader import BitReader
 from parsers.ts_segment import TSSegmentParser
 from parsers.videoframesinfo import VideoFramesInfo
-
-try:
-    import urllib2
-except ImportError:
-    from urllib.request import urlopen as urllib2
 
 num_segments_to_analyze_per_playlist = 1
 max_frames_to_show = 30
@@ -26,15 +23,10 @@ videoFramesInfoDict = dict()
 def download_url(uri, httpRange=None):
     print("\n\t** Downloading {url}, Range: {httpRange} **".format(url=uri, httpRange=httpRange))
 
-    opener = urllib2.build_opener(m3u8.getCookieProcessor())
-    if(httpRange is not None):
-        opener.addheaders.append(('Range', httpRange))
+    response = requests.get(uri,
+        headers=dict(Range=httpRange) if httpRange else dict())
 
-    response = opener.open(uri)
-    content = response.read()
-    response.close()
-
-    return content
+    return response.content
 
 def analyze_variant(variant, bw):
     print ("***** Analyzing variant ({}) *****".format(bw))
