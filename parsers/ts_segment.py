@@ -43,7 +43,7 @@ class TSSegmentParser(object):
 
     def getTrack(self, index):
         i = 0
-        for _, value in self.tracks.iteritems():
+        for _, value in self.tracks.items():
             if(i == index):
                 return value
             i = i + 1

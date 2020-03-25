@@ -22,11 +22,11 @@ class BitReader(object):
         return self.byteOffset * 8 + self.bitOffset
 
     def setPosition(self, newPosition):
-        self.byteOffset = newPosition / 8
+        self.byteOffset = newPosition // 8
         self.bitOffset = newPosition % 8
 
     def skipBits(self, n):
-        self.byteOffset += (n / 8)
+        self.byteOffset += (n // 8)
         self.bitOffset += (n % 8)
 
         if (self.bitOffset > 7):
@@ -89,7 +89,7 @@ class BitReader(object):
         if(codeNum % 2 == 0):
             sign = -1;
 
-        return sign * ((codeNum + 1) / 2)
+        return sign * ((codeNum + 1) // 2)
 
     def readExpGolombCodeNum(self):
         leadingZeros = 0

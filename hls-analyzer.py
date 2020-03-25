@@ -112,11 +112,11 @@ def analyzeFrames(ts_parser, bw, segment_index):
 
     for i in range(0, ts_parser.getNumTracks()):
         track = ts_parser.getTrack(i)
-        print ("\tTrack #{0} - Frames: ".format(i)),
+        print ("\tTrack #{0} - Frames: ".format(i), end="")
 
         frameCount = min(max_frames_to_show, len(track.payloadReader.frames))
         for j in range(0, frameCount):
-            print "{0}".format(track.payloadReader.frames[j].type),
+            print("{0}".format(track.payloadReader.frames[j].type), end=" ")
         if track.payloadReader.getMimeType().startswith("video/"):
             print("\tAA: {}, BB: {}".format(segment_index, bw))
             if len(track.payloadReader.frames) > 0:
@@ -175,8 +175,8 @@ def analyze_segment(segment, bw, segment_index):
 def analyze_variants_frame_alignment():
     df = videoFramesInfoDict.copy()
     bw, vf = df.popitem()
-    for bwkey, frameinfo in df.iteritems():
-        for segment_index, value in frameinfo.segmentsFirstFramePts.iteritems():
+    for bwkey, frameinfo in df.items():
+        for segment_index, value in frameinfo.segmentsFirstFramePts.items():
             if vf.segmentsFirstFramePts[segment_index] != value:
                 print ("Warning: Variants {} bps and {} bps, segment {}, are not aligned (first frame PTS not equal {} != {})".format(bw, bwkey, segment_index, vf.segmentsFirstFramePts[segment_index], value))
 
