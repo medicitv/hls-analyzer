@@ -8,6 +8,7 @@ import os
 import logging
 import sys
 import argparse
+
 import m3u8
 import requests
 
@@ -34,7 +35,7 @@ def analyze_variant(variant, bw):
     print ("\tVersion: {}".format(variant.version))
     print ("\tStart Media sequence: {}".format(variant.media_sequence))
     print ("\tIs Live: {}".format(not variant.is_endlist))
-    print ("\tEncrypted: {}".format(variant.key is not None))
+    print ("\tEncrypted: {}".format(variant.keys is not None))
     print ("\tNumber of segments: {}".format(len(variant.segments)))
     print ("\tPlaylist duration: {}".format(get_playlist_duration(variant)))
     

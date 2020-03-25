@@ -9,6 +9,7 @@ setup(
     description="Analyzer for HTTP Live Streams (HLS) content",
     install_requires=[
         "iso8601",
+        "m3u8",
         "requests",
     ]
 )
