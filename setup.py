@@ -11,5 +11,6 @@ setup(
         "iso8601",
         "m3u8",
         "requests",
+        "coloredlogs",
     ]
 )

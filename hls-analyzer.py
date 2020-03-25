@@ -8,37 +8,72 @@ import os
 import logging
 import sys
 import argparse
+import urllib
 
 import m3u8
 import requests
+import coloredlogs
 
 from parsers.bitreader import BitReader
 from parsers.ts_segment import TSSegmentParser
 from parsers.videoframesinfo import VideoFramesInfo
+
+logger = logging.getLogger('hls-analyzer')
+coloredlogs.install(level='DEBUG', logger=logger)
 
 num_segments_to_analyze_per_playlist = 1
 max_frames_to_show = 30
 
 videoFramesInfoDict = dict()
 
-def download_url(uri, httpRange=None):
-    print("\n\t** Downloading {url}, Range: {httpRange} **".format(url=uri, httpRange=httpRange))
+def log(level, context, message, type):
+    logger.log(
+        logging._nameToLevel[level.upper()],
+        "%s %s %s",
+        ".".join(context), type or "", message)
 
+def debug(context, message, type=None):
+    log("debug", context, message, type)
+
+def info(context, message, type=None):
+    log("info", context, message, type)
+
+def warning(context, message, type=None):
+    log("warning", context, message, type)
+
+def error(context, message, type=None):
+    log("error", context, message, type)
+
+def critical(context, message, type=None):
+    log("critical", context, message, type)
+
+def download_url(uri, httpRange=None):
     response = requests.get(uri,
         headers=dict(Range=httpRange) if httpRange else dict())
 
     return response.content
 
-def analyze_variant(variant, bw):
-    print ("***** Analyzing variant ({}) *****".format(bw))
-    print ("\n\t** Generic information **")
-    print ("\tVersion: {}".format(variant.version))
-    print ("\tStart Media sequence: {}".format(variant.media_sequence))
-    print ("\tIs Live: {}".format(not variant.is_endlist))
-    print ("\tEncrypted: {}".format(variant.keys is not None))
-    print ("\tNumber of segments: {}".format(len(variant.segments)))
-    print ("\tPlaylist duration: {}".format(get_playlist_duration(variant)))
-    
+m3u8_models = (getattr(m3u8.model, k) for k in dir(m3u8.model) if isinstance(getattr(m3u8.model, k), type))
+m3u8_excludes = ('segments',)
+
+def analyze_m3u8_obj(context, m3u8_obj):
+
+    if isinstance(m3u8_obj, dict):
+        for k, v in m3u8_obj.items():
+            if k in m3u8_excludes: continue
+            analyze_m3u8_obj(context+[k], v)
+
+    elif isinstance(m3u8_obj, list):
+        for i, v in enumerate(m3u8_obj):
+            analyze_m3u8_obj(context[:-1]+[context[-1] + "[{}]".format(i)], v)
+
+    else:
+        info(context, m3u8_obj)
+
+def analyze_variant(context, variant, bw):
+
+    analyze_m3u8_obj(context, variant.data)
+
     start = 0
     videoFramesInfoDict[bw] = VideoFramesInfo()
 
@@ -53,7 +88,7 @@ def analyze_variant(variant, bw):
             start = 0
 
     for i in range(start, min(start + num_segments_to_analyze_per_playlist, len(variant.segments))):
-        analyze_segment(variant.segments[i], bw, variant.media_sequence + i)
+        analyze_segment(context+["segment[{}]".format(i+1)], variant.segments[i], bw, variant.media_sequence + i)
 
 def get_playlist_duration(variant):
     duration = 0
@@ -74,60 +109,55 @@ def get_range(segment_range):
 
     return "bytes={}-{}".format(start, start+length-1);
 
-def printFormatInfo(ts_parser):
-    print ("\t** Tracks and Media formats **")
-
+def printFormatInfo(context, ts_parser):
     for i in range(0, ts_parser.getNumTracks()):
+        ctx = context+["track[{}]".format(i)]
         track = ts_parser.getTrack(i)
-        print ("\tTrack #{} - Type: {}, Format: {}".format(i,
-            track.payloadReader.getMimeType(), track.payloadReader.getFormat()))
+        info(ctx + ["type"], track.payloadReader.getMimeType())
+        info(ctx + ["format"], track.payloadReader.getFormat())
 
-def printTimingInfo(ts_parser, segment):
-    print ("\n\t** Timing information **")
-    print("\tSegment declared duration: {}".format(segment.duration))
+def printTimingInfo(context, ts_parser, segment):
     minDuration = 0;
     for i in range(0, ts_parser.getNumTracks()):
+        ctx = context+["track[{}]".format(i)]
         track = ts_parser.getTrack(i)
-        print ("\tTrack #{} - Duration: {} s, First PTS: {} s, Last PTS: {} s".format(i,
-            track.payloadReader.getDuration()/1000000.0, track.payloadReader.getFirstPTS() / 1000000.0,
-            track.payloadReader.getLastPTS()/1000000.0))
+        info(ctx + ['duration'], track.payloadReader.getDuration()/1000000.0)
+        info(ctx + ['first_pts'], track.payloadReader.getFirstPTS() / 1000000.0)
+        info(ctx + ['last_pts'], track.payloadReader.getLastPTS()/1000000.0)
+
         if(track.payloadReader.getDuration() != 0 and (minDuration == 0 or minDuration > track.payloadReader.getDuration())):
             minDuration = track.payloadReader.getDuration()
 
     minDuration /= 1000000.0
     if minDuration > 0:
-        print("\tDuration difference (declared vs real): {0}s ({1:.2f}%)".format(segment.duration - minDuration, abs((1 - segment.duration/minDuration)*100)))
+        info(context + ["duration_difference"], segment.duration - minDuration)
+        info(context + ["duration_difference_percent"], "{:.2f}%".format(abs(1 - segment.duration/minDuration)*100))
     else:
-        print("\tDuration is 0")
+        info(context + ["duration"], 0)
 
-def analyzeFrames(ts_parser, bw, segment_index):
-    print ("\n\t** Frames **")
-
+def analyzeFrames(context, ts_parser, bw, segment_index):
     for i in range(0, ts_parser.getNumTracks()):
+        ctx = context + ["track[{}]".format(i)]
         track = ts_parser.getTrack(i)
-        print ("\tTrack #{0} - Frames: ".format(i), end="")
+        frames = []
 
         frameCount = min(max_frames_to_show, len(track.payloadReader.frames))
         for j in range(0, frameCount):
-            print("{0}".format(track.payloadReader.frames[j].type), end=" ")
+            frames.append("{0}".format(track.payloadReader.frames[j].type))
         if track.payloadReader.getMimeType().startswith("video/"):
-            print("\tAA: {}, BB: {}".format(segment_index, bw))
             if len(track.payloadReader.frames) > 0:
                 videoFramesInfoDict[bw].segmentsFirstFramePts[segment_index] = track.payloadReader.frames[0].timeUs
             else:
                 videoFramesInfoDict[bw].segmentsFirstFramePts[segment_index] = 0
-            analyzeVideoframes(track, bw)
-        print ("")
+            analyzeVideoframes(ctx, track, bw)
+        info(ctx+["frames"], " ".join(frames))
 
-def analyzeVideoframes(track, bw):
+def analyzeVideoframes(context, track, bw):
     nkf = 0
-    print ("")
     for i in range(0, len(track.payloadReader.frames)): 
         if i == 0:
-            if track.payloadReader.frames[i].isKeyframe() == True:
-                print ("\t\tGood! Track starts with a keyframe".format(i))
-            else:
-                print ("\t\tWarning: note this is not starting with a keyframe. This will cause not seamless bitrate switching".format(i))
+            if not track.payloadReader.frames[i].isKeyframe():
+                warning(context, "note this is not starting with a keyframe. This will cause not seamless bitrate switching", "keyframe_not_starting_track")
         if track.payloadReader.frames[i].isKeyframe():
             nkf = nkf + 1
             if videoFramesInfoDict[bw].lastKfPts > -1:
@@ -138,32 +168,30 @@ def analyzeVideoframes(track, bw):
                     videoFramesInfoDict[bw].minKfi = min(videoFramesInfoDict[bw].lastKfi, videoFramesInfoDict[bw].minKfi)
                 videoFramesInfoDict[bw].maxKfi = max(videoFramesInfoDict[bw].lastKfi, videoFramesInfoDict[bw].maxKfi)  
             videoFramesInfoDict[bw].lastKfPts = track.payloadReader.frames[i].timeUs
-    print ("\t\tKeyframes count: {}".format(nkf))
+    info(context+["keyframes"], nkf)
     if nkf == 0:
-        print ("\t\tWarning: there are no keyframes in this track! This will cause a bad playback experience")
+        warning(context, "there are no keyframes in this track! This will cause a bad playback experience", "no_keyframe_in_track")
     if nkf > 1:
-        print ("\t\tKey frame interval within track: {} seconds".format(videoFramesInfoDict[bw].lastKfi/1000000.0))
+        info(context+["keyframe_interval"], videoFramesInfoDict[bw].lastKfi/1000000.0)
     else:
         if track.payloadReader.getDuration() > 3000000.0:
-            print ("\t\tWarning: track too long to have just 1 keyframe. This could cause bad playback experience and poor seeking accuracy in some video players")
+            warning(context, "track too long to have just 1 keyframe. This could cause bad playback experience and poor seeking accuracy in some video players", "not_enough_keyframes")
 
     videoFramesInfoDict[bw].count = videoFramesInfoDict[bw].count + nkf
 
     if videoFramesInfoDict[bw].count > 1:
         kfiDeviation = videoFramesInfoDict[bw].maxKfi - videoFramesInfoDict[bw].minKfi
         if kfiDeviation > 500000:
-            print("\t\tWarning: Key frame interval is not constant. Min KFI: {}, Max KFI: {}".format(videoFramesInfoDict[bw].minKfi, videoFramesInfoDict[bw].maxKfi) )
+            warning(context, "Key frame interval is not constant. Min KFI: {}, Max KFI: {}".format(videoFramesInfoDict[bw].minKfi, videoFramesInfoDict[bw].maxKfi), "inconstant_keyframe_interval")
 
-def analyze_segment(segment, bw, segment_index):
+def analyze_segment(context, segment, bw, segment_index):
     segment_data = bytearray(download_url(segment.absolute_uri, get_range(segment.byterange)))
     ts_parser = TSSegmentParser(segment_data)
     ts_parser.prepare()
 
-    printFormatInfo(ts_parser)
-    printTimingInfo(ts_parser, segment)
-    analyzeFrames(ts_parser, bw, segment_index)
-
-    print ("\n")
+    printFormatInfo(context, ts_parser)
+    printTimingInfo(context, ts_parser, segment)
+    analyzeFrames(context, ts_parser, bw, segment_index)
 
 def analyze_variants_frame_alignment():
     df = videoFramesInfoDict.copy()
@@ -177,9 +205,12 @@ def analyze_variants_frame_alignment():
 
         for segment_index, value in frameinfo.segmentsFirstFramePts.items():
             if vf.segmentsFirstFramePts[segment_index] != value:
-                print ("Warning: Variants {} bps and {} bps, segment {}, are not aligned (first frame PTS not equal {} != {})".format(bw, bwkey, segment_index, vf.segmentsFirstFramePts[segment_index], value))
+                warning("Variants {} bps and {} bps, segment {}, are not aligned (first frame PTS not equal {} != {})".format(bw, bwkey, segment_index, vf.segmentsFirstFramePts[segment_index], value))
 
 def main():
+
+    global num_segments_to_analyze_per_playlist, max_frames_to_show
+
     parser = argparse.ArgumentParser(description='Analyze HLS streams and gets useful information')
 
     parser.add_argument('url', metavar='Url', type=str,
@@ -193,22 +224,35 @@ def main():
 
     args = parser.parse_args()
 
-    m3u8_obj = m3u8.load(args.url)
+    try:
+        m3u8_obj = m3u8.load(args.url)
+    except urllib.error.HTTPError as e:
+        critical(None, e, "manifest_http_error")
+        return
+    except Exception as e:
+        critical(None, e, "manifest_exception")
+        return
+
+
     num_segments_to_analyze_per_playlist = args.segments
     max_frames_to_show = args.frame_info_len
 
     if(m3u8_obj.is_variant):
-        print ("Master playlist. List of variants:")
+        analyze_m3u8_obj(['manifest'], m3u8_obj.data)
 
         for playlist in m3u8_obj.playlists:
-            print ("\tPlaylist: {}, bw: {}".format(playlist.absolute_uri, playlist.stream_info.bandwidth))
+            context = ["variant[{}]".format(playlist.stream_info.bandwidth)]
+            try:
+                analyze_variant(context, m3u8.load(playlist.absolute_uri), playlist.stream_info.bandwidth)
+            except urllib.error.HTTPError as e:
+                critical(context, e, "playlist_http_error")
+                return
+            except Exception as e:
+                critical(context, e, "playlist_exception")
+                return
 
-        print ("")
-
-        for playlist in m3u8_obj.playlists:
-            analyze_variant(m3u8.load(playlist.absolute_uri), playlist.stream_info.bandwidth)
     else:
-        analyze_variant(m3u8_obj, 0)
+        analyze_variant([], m3u8_obj, 0)
 
     analyze_variants_frame_alignment()
 
