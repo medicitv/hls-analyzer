@@ -54,13 +54,13 @@ def download_url(uri, httpRange=None):
     return response.content
 
 m3u8_models = (getattr(m3u8.model, k) for k in dir(m3u8.model) if isinstance(getattr(m3u8.model, k), type))
-m3u8_excludes = ('segments',)
+m3u8_model_excludes = ('segments',)
 
 def analyze_m3u8_obj(context, m3u8_obj):
 
     if isinstance(m3u8_obj, dict):
         for k, v in m3u8_obj.items():
-            if k in m3u8_excludes: continue
+            if k in m3u8_model_excludes: continue
             analyze_m3u8_obj(context+[k], v)
 
     elif isinstance(m3u8_obj, list):
@@ -69,6 +69,14 @@ def analyze_m3u8_obj(context, m3u8_obj):
 
     else:
         info(context, m3u8_obj)
+
+def analyze_manifest(context, manifest):
+
+    analyze_m3u8_obj(context, manifest.data)
+
+    if any(len(playlist.stream_info.codecs.split(',')) != len(manifest.playlists[0].stream_info.codecs.split(',')) for playlist in manifest.playlists):
+        warning(context, "different number of tracks for variants", "variants_tracks_vary")
+
 
 def analyze_variant(context, variant, bw):
 
@@ -109,14 +117,14 @@ def get_range(segment_range):
 
     return "bytes={}-{}".format(start, start+length-1);
 
-def printFormatInfo(context, ts_parser):
+def print_format_info(context, ts_parser):
     for i in range(0, ts_parser.getNumTracks()):
         ctx = context+["track[{}]".format(i)]
         track = ts_parser.getTrack(i)
         info(ctx + ["type"], track.payloadReader.getMimeType())
         info(ctx + ["format"], track.payloadReader.getFormat())
 
-def printTimingInfo(context, ts_parser, segment):
+def print_timing_info(context, ts_parser, segment):
     minDuration = 0;
     for i in range(0, ts_parser.getNumTracks()):
         ctx = context+["track[{}]".format(i)]
@@ -135,7 +143,7 @@ def printTimingInfo(context, ts_parser, segment):
     else:
         info(context + ["duration"], 0)
 
-def analyzeFrames(context, ts_parser, bw, segment_index):
+def analyze_frames(context, ts_parser, bw, segment_index):
     for i in range(0, ts_parser.getNumTracks()):
         ctx = context + ["track[{}]".format(i)]
         track = ts_parser.getTrack(i)
@@ -149,10 +157,10 @@ def analyzeFrames(context, ts_parser, bw, segment_index):
                 videoFramesInfoDict[bw].segmentsFirstFramePts[segment_index] = track.payloadReader.frames[0].timeUs
             else:
                 videoFramesInfoDict[bw].segmentsFirstFramePts[segment_index] = 0
-            analyzeVideoframes(ctx, track, bw)
+            analyze_video_frames(ctx, track, bw)
         info(ctx+["frames"], " ".join(frames))
 
-def analyzeVideoframes(context, track, bw):
+def analyze_video_frames(context, track, bw):
     nkf = 0
     for i in range(0, len(track.payloadReader.frames)): 
         if i == 0:
@@ -189,9 +197,9 @@ def analyze_segment(context, segment, bw, segment_index):
     ts_parser = TSSegmentParser(segment_data)
     ts_parser.prepare()
 
-    printFormatInfo(context, ts_parser)
-    printTimingInfo(context, ts_parser, segment)
-    analyzeFrames(context, ts_parser, bw, segment_index)
+    print_format_info(context, ts_parser)
+    print_timing_info(context, ts_parser, segment)
+    analyze_frames(context, ts_parser, bw, segment_index)
 
 def analyze_variants_frame_alignment():
     df = videoFramesInfoDict.copy()
@@ -238,7 +246,7 @@ def main():
     max_frames_to_show = args.frame_info_len
 
     if(m3u8_obj.is_variant):
-        analyze_m3u8_obj(['manifest'], m3u8_obj.data)
+        analyze_manifest(["manifest"], m3u8_obj)
 
         for playlist in m3u8_obj.playlists:
             context = ["variant[{}]".format(playlist.stream_info.bandwidth)]
