@@ -167,8 +167,14 @@ def analyze_segment(segment, bw, segment_index):
 
 def analyze_variants_frame_alignment():
     df = videoFramesInfoDict.copy()
-    bw, vf = df.popitem()
+    bw = None
+    vf = None
     for bwkey, frameinfo in df.items():
+        if len(frameinfo.segmentsFirstFramePts) == 0: continue
+        if not vf:
+            bw, vf = bwkey, frameinfo
+            continue
+
         for segment_index, value in frameinfo.segmentsFirstFramePts.items():
             if vf.segmentsFirstFramePts[segment_index] != value:
                 print ("Warning: Variants {} bps and {} bps, segment {}, are not aligned (first frame PTS not equal {} != {})".format(bw, bwkey, segment_index, vf.segmentsFirstFramePts[segment_index], value))
