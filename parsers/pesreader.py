@@ -9,7 +9,7 @@ from parsers.id3reader import ID3Reader
 from parsers.mpegreader import MpegReader
 from parsers.metadatareader import MetadataReader
 from parsers.unknownpayloadreader import UnknownPayloadReader
-from bitreader import BitReader
+from parsers.bitreader import BitReader
 
 class PESReader(object):
 

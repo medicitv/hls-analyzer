@@ -3,7 +3,7 @@
 # Use of this source code is governed by a MIT License
 # license that can be found in the LICENSE file.
 
-from bitreader import BitReader
+from parsers.bitreader import BitReader
 from parsers.payloadreader import PayloadReader
 
 class ID3Reader(PayloadReader):

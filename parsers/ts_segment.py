@@ -4,7 +4,7 @@
 # license that can be found in the LICENSE file.
 
 from array import array
-from bitreader import BitReader
+from parsers.bitreader import BitReader
 from parsers.pesreader import PESReader
 
 class TSSegmentParser(object):

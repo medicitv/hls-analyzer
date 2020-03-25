@@ -9,9 +9,9 @@ import logging
 import sys
 import argparse
 import m3u8
-from bitreader import BitReader
-from ts_segment import TSSegmentParser
-from videoframesinfo import VideoFramesInfo
+from parsers.bitreader import BitReader
+from parsers.ts_segment import TSSegmentParser
+from parsers.videoframesinfo import VideoFramesInfo
 
 try:
     import urllib2
