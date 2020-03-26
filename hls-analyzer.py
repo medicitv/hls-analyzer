@@ -51,6 +51,8 @@ def download_url(uri, httpRange=None):
     response = requests.get(uri,
         headers=dict(Range=httpRange) if httpRange else dict())
 
+    response.raise_for_status()
+
     return response.content
 
 m3u8_models = (getattr(m3u8.model, k) for k in dir(m3u8.model) if isinstance(getattr(m3u8.model, k), type))
@@ -193,7 +195,12 @@ def analyze_video_frames(context, track, bw):
             warning(context, "Key frame interval is not constant. Min KFI: {}, Max KFI: {}".format(videoFramesInfoDict[bw].minKfi, videoFramesInfoDict[bw].maxKfi), "inconstant_keyframe_interval")
 
 def analyze_segment(context, segment, bw, segment_index):
-    segment_data = bytearray(download_url(segment.absolute_uri, get_range(segment.byterange)))
+    try:
+        segment_data = bytearray(download_url(segment.absolute_uri, get_range(segment.byterange)))
+    except requests.exceptions.HTTPError as e:
+        error(context, e, "segment_http_error")
+        return
+
     ts_parser = TSSegmentParser(segment_data)
     ts_parser.prepare()
 
